@@ -37,9 +37,8 @@ pub fn build(b: *std.Build) void {
     const s2n_hash = @import("build.zig.zon").dependencies.s2n_tls.hash;
     const s2n_prelude_h = std.fmt.allocPrint(
         b.allocator,
-        "{[cwd]s}/zig-pkg/{[s2n_hash]s}/utils/s2n_prelude.h",
+        "zig-pkg/{[s2n_hash]s}/utils/s2n_prelude.h",
         .{
-            .cwd = b.root.toString(b.allocator) catch unreachable,
             .s2n_hash = s2n_hash,
         },
     ) catch unreachable;
