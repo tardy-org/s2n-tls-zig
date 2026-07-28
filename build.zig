@@ -1,7 +1,8 @@
 const std = @import("std");
-const log = std.log.scoped(.build);
+const Build = std.Build;
+const log = std.log.scoped(.@"build.zig");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -73,16 +74,21 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = mod,
     });
+    configureLib(lib);
 
     if (lib.rootModuleTarget().os.tag == .linux) {
         const openssl = b.dependency("openssl", .{
             .target = target,
             .optimize = optimize,
         });
-
-        mod.linkLibrary(openssl.artifact("openssl"));
+        const openssl_lib = openssl.artifact("openssl");
+        configureLib(openssl_lib);
+        mod.linkLibrary(openssl_lib);
     } else {
-        std.debug.print("On non-Linux platforms, you must provide libssl and libcrypto installed on system.", .{});
+        log.info(
+            "On non-Linux platforms, you must provide libssl and libcrypto installed on system.",
+            .{},
+        );
         mod.linkSystemLibrary("ssl", .{});
         mod.linkSystemLibrary("crypto", .{});
     }
@@ -148,6 +154,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+}
+
+pub fn configureLib(lib: *Build.Step.Compile) void {
+    lib.link_function_sections = true;
+    lib.link_data_sections = true;
+    lib.link_gc_sections = true;
+    lib.compress_debug_sections = .zstd;
+    lib.incremental = true;
+    lib.pie = true;
+    lib.use_new_linker = false;
 }
 
 const crypto_src: []const []const u8 = &.{
