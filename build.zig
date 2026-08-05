@@ -69,14 +69,14 @@ pub fn build(b: *Build) void {
 
     mod.addIncludePath(upstream.path("api/"));
 
-    const lib = b.addLibrary(.{
+    const s2n = b.addLibrary(.{
         .name = "s2n",
         .linkage = .static,
         .root_module = mod,
     });
-    configureLib(lib);
+    configureLib(s2n);
 
-    if (lib.rootModuleTarget().os.tag == .linux) {
+    if (s2n.rootModuleTarget().os.tag == .linux) {
         const openssl = b.dependency("openssl", .{
             .target = target,
             .optimize = optimize,
@@ -93,9 +93,9 @@ pub fn build(b: *Build) void {
         mod.linkSystemLibrary("crypto", .{});
     }
 
-    lib.installHeader(upstream.path("api/s2n.h"), "s2n.h");
+    s2n.installHeader(upstream.path("api/s2n.h"), "s2n.h");
 
-    b.installArtifact(lib);
+    b.installArtifact(s2n);
 
     const check = b.addLibrary(.{
         .name = "s2n",
@@ -129,7 +129,10 @@ pub fn build(b: *Build) void {
         ) catch |err| switch (err) {
             error.FileNotFound => {
                 const Translator = @import("translate_c").Translator;
-                const translate_c = b.dependency("translate_c", .{});
+                const translate_c = b.dependency(
+                    "translate_c",
+                    .{},
+                );
                 const t: Translator = .init(translate_c, .{
                     .c_source_file = upstream.path("api/s2n.h"),
                     .target = target,
@@ -149,7 +152,7 @@ pub fn build(b: *Build) void {
             },
         };
     }
-    _ = b.addModule("s2n_h", .{
+    _ = b.addModule("s2n.h", .{
         .root_source_file = b.path("api/s2n.zig"),
         .target = target,
         .optimize = optimize,
