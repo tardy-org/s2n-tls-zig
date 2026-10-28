@@ -76,21 +76,24 @@ pub fn build(b: *Build) void {
     });
     configureLib(s2n);
 
-    if (s2n.rootModuleTarget().os.tag == .linux) {
-        const openssl = b.dependency("openssl", .{
-            .target = target,
-            .optimize = optimize,
-        });
-        const openssl_lib = openssl.artifact("openssl");
-        configureLib(openssl_lib);
-        mod.linkLibrary(openssl_lib);
-    } else {
-        log.info(
-            "On non-Linux platforms, you must provide libssl and libcrypto installed on system.",
-            .{},
-        );
-        mod.linkSystemLibrary("ssl", .{});
-        mod.linkSystemLibrary("crypto", .{});
+    switch (s2n.rootModuleTarget().os.tag) {
+        .linux => {
+            const openssl = b.dependency("openssl", .{
+                .target = target,
+                .optimize = optimize,
+            });
+            const openssl_lib = openssl.artifact("openssl");
+            configureLib(openssl_lib);
+            mod.linkLibrary(openssl_lib);
+        },
+        else => {
+            log.info(
+                "On non-Linux platforms, you must provide libssl and libcrypto installed on system.",
+                .{},
+            );
+            mod.linkSystemLibrary("ssl", .{});
+            mod.linkSystemLibrary("crypto", .{});
+        },
     }
 
     s2n.installHeader(upstream.path("api/s2n.h"), "s2n.h");
@@ -108,60 +111,22 @@ pub fn build(b: *Build) void {
     );
     check_step.dependOn(&check.step);
 
-    const update_module = b.step(
-        "update-module",
-        "generate/update api/s2n.zig module to latest",
-    );
+    const s2n_h = b.addTranslateC(.{
+        .root_source_file = upstream.path("api/s2n.h"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    {
-        const api = std.Io.Dir.openDir(
-            b.root.root_dir.handle,
-            b.graph.io,
-            "api/",
-            .{},
-        ) catch unreachable;
-        defer api.close(b.graph.io);
-
-        _ = api.statFile(
-            b.graph.io,
-            "s2n.zig",
-            .{},
-        ) catch |err| switch (err) {
-            error.FileNotFound => {
-                const Translator = @import("translate_c").Translator;
-                const translate_c = b.dependency(
-                    "translate_c",
-                    .{},
-                );
-                const t: Translator = .init(translate_c, .{
-                    .c_source_file = upstream.path("api/s2n.h"),
-                    .target = target,
-                    .optimize = optimize,
-                });
-
-                const s2n_h = b.addUpdateSourceFiles();
-                s2n_h.addCopyFileToSource(
-                    t.output_file,
-                    "api/s2n.zig",
-                );
-                update_module.dependOn(&s2n_h.step);
-            },
-            else => |e| {
-                log.err("Error: {t}", .{e});
-                std.process.exit(2);
-            },
-        };
-    }
     _ = b.addModule("s2n.h", .{
-        .root_source_file = b.path("api/s2n.zig"),
+        .root_source_file = s2n_h.getOutput(),
         .target = target,
         .optimize = optimize,
     });
 }
 
 pub fn configureLib(lib: *Build.Step.Compile) void {
-    lib.link_function_sections = true;
-    lib.link_data_sections = true;
+    lib.function_sections = true;
+    lib.data_sections = true;
     lib.link_gc_sections = true;
     lib.compress_debug_sections = .zstd;
     lib.incremental = true;
